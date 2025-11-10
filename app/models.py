@@ -288,4 +288,85 @@ class PeoplePhoto(models.Model):
         return f"Photo for {self.person.full_name}"
     
 
+
+class Notification(models.Model):
+    """
+    Notification model for sending messages to users about people
+    Admin can notify users about profile views, connection requests, etc.
+    """
+    NOTIFICATION_TYPES = [
+        ('profile_view', 'Profile View'),
+        ('connection_request', 'Connection Request'),
+        ('match', 'New Match'),
+        ('message', 'New Message'),
+        ('like', 'Someone Liked You'),
+        ('custom', 'Custom Message'),
+    ]
+
+    # Foreign Keys
+    user = models.ForeignKey(
+        CustomUser,
+        on_delete=models.CASCADE,
+        related_name='notifications',
+        help_text="User who receives this notification"
+    )
+    person = models.ForeignKey(
+        People,
+        on_delete=models.CASCADE,
+        related_name='sent_notifications',
+        help_text="Person this notification is about"
+    )
+
+    # Notification Content
+    notification_type = models.CharField(
+        max_length=20,
+        choices=NOTIFICATION_TYPES,
+        default='custom'
+    )
+    message = models.TextField(
+        help_text="Short message to display to the user"
+    )
     
+    # Status
+    is_read = models.BooleanField(default=False)
+    
+    # Timestamps
+    created_at = models.DateTimeField(default=timezone.now)
+    read_at = models.DateTimeField(null=True, blank=True)
+    
+    class Meta:
+        db_table = 'notifications'
+        verbose_name = 'Notification'
+        verbose_name_plural = 'Notifications'
+        ordering = ['-created_at']
+        indexes = [
+            models.Index(fields=['user', 'is_read']),
+            models.Index(fields=['user', '-created_at']),
+        ]
+
+    def __str__(self):
+        return f"Notification for {self.user.email} about {self.person.full_name}"
+
+    def mark_as_read(self):
+        """Mark notification as read and set read timestamp"""
+        if not self.is_read:
+            self.is_read = True
+            self.read_at = timezone.now()
+            self.save(update_fields=['is_read', 'read_at'])
+
+    @classmethod
+    def get_unread_count(cls, user):
+        """Get count of unread notifications for a user"""
+        return cls.objects.filter(user=user, is_read=False).count()
+
+    @classmethod
+    def create_notification(cls, user, person, message, notification_type='custom'):
+        """Helper method to create a notification"""
+        return cls.objects.create(
+            user=user,
+            person=person,
+            message=message,
+            notification_type=notification_type
+        )
+
+

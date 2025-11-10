@@ -1,10 +1,12 @@
 from rest_framework import status
 from rest_framework.decorators import api_view, permission_classes
 from rest_framework.response import Response
-from rest_framework.permissions import IsAuthenticated, AllowAny
+from rest_framework.permissions import IsAuthenticated, AllowAny, IsAdminUser
 from rest_framework.authtoken.models import Token
+from django.utils import timezone
 from django.contrib.auth import logout
-from .models import CustomUser, UserPhoto, People
+from .models import CustomUser, UserPhoto, People, Notification
+
 from .serializers import (
     UserRegistrationSerializer,
     UserLoginSerializer,
@@ -13,6 +15,9 @@ from .serializers import (
     PasswordChangeSerializer,
     UserPhotoSerializer,
     PeopleListSerializer, PeopleDetailSerializer,
+    NotificationSerializer,
+    NotificationCreateSerializer,
+    NotificationBulkReadSerializer,
 )
 from django.db.models import Q
 
@@ -497,6 +502,328 @@ def check_access_to_person(request, person_id):
 
 
 
+
+@api_view(['GET'])
+@permission_classes([IsAuthenticated])
+def get_user_notifications(request):
+    """
+    Get all notifications for authenticated user
+    Supports filtering by read/unread status
+    
+    Query parameters:
+    - is_read: true/false (filter by read status)
+    - limit: number of notifications to return (default: 50)
+    
+    Example: GET /api/notifications/?is_read=false&limit=20
+    """
+    queryset = Notification.objects.filter(user=request.user)
+    
+    # Filter by read status if provided
+    is_read_filter = request.GET.get('is_read')
+    if is_read_filter is not None:
+        is_read = is_read_filter.lower() == 'true'
+        queryset = queryset.filter(is_read=is_read)
+    
+    # Apply limit
+    limit = request.GET.get('limit', 50)
+    try:
+        limit = int(limit)
+        queryset = queryset[:limit]
+    except ValueError:
+        queryset = queryset[:50]
+    
+    # Get counts
+    total_count = Notification.objects.filter(user=request.user).count()
+    unread_count = Notification.objects.filter(
+        user=request.user,
+        is_read=False
+    ).count()
+    
+    serializer = NotificationSerializer(queryset, many=True)
+    
+    return Response({
+        'notifications': serializer.data,
+        'total_count': total_count,
+        'unread_count': unread_count,
+        'read_count': total_count - unread_count
+    }, status=status.HTTP_200_OK)
+
+
+@api_view(['GET'])
+@permission_classes([IsAuthenticated])
+def get_notification_detail(request, notification_id):
+    """
+    Get details of a specific notification
+    Automatically marks it as read
+    
+    Example: GET /api/notifications/1/
+    """
+    try:
+        notification = Notification.objects.get(
+            id=notification_id,
+            user=request.user
+        )
+    except Notification.DoesNotExist:
+        return Response({
+            'error': 'Notification not found'
+        }, status=status.HTTP_404_NOT_FOUND)
+    
+    # Mark as read if not already
+    if not notification.is_read:
+        notification.mark_as_read()
+    
+    serializer = NotificationSerializer(notification)
+    
+    return Response({
+        'notification': serializer.data
+    }, status=status.HTTP_200_OK)
+
+
+@api_view(['POST'])
+@permission_classes([IsAuthenticated])
+def mark_notification_as_read(request, notification_id):
+    """
+    Mark a specific notification as read
+    
+    Example: POST /api/notifications/1/mark-read/
+    """
+    try:
+        notification = Notification.objects.get(
+            id=notification_id,
+            user=request.user
+        )
+    except Notification.DoesNotExist:
+        return Response({
+            'error': 'Notification not found'
+        }, status=status.HTTP_404_NOT_FOUND)
+    
+    notification.mark_as_read()
+    
+    serializer = NotificationSerializer(notification)
+    
+    return Response({
+        'message': 'Notification marked as read',
+        'notification': serializer.data
+    }, status=status.HTTP_200_OK)
+
+
+@api_view(['POST'])
+@permission_classes([IsAuthenticated])
+def mark_all_notifications_as_read(request):
+    """
+    Mark all user's notifications as read
+    
+    Example: POST /api/notifications/mark-all-read/
+    """
+    updated_count = Notification.objects.filter(
+        user=request.user,
+        is_read=False
+    ).update(
+        is_read=True,
+        read_at=timezone.now()
+    )
+    
+    return Response({
+        'message': f'{updated_count} notifications marked as read',
+        'updated_count': updated_count
+    }, status=status.HTTP_200_OK)
+
+
+@api_view(['POST'])
+@permission_classes([IsAuthenticated])
+def mark_multiple_notifications_as_read(request):
+    """
+    Mark multiple notifications as read
+    
+    Body: {
+        "notification_ids": [1, 2, 3, 4]
+    }
+    
+    Example: POST /api/notifications/mark-multiple-read/
+    """
+    serializer = NotificationBulkReadSerializer(data=request.data)
+    
+    if not serializer.is_valid():
+        return Response(
+            serializer.errors,
+            status=status.HTTP_400_BAD_REQUEST
+        )
+    
+    notification_ids = serializer.validated_data['notification_ids']
+    
+    updated_count = Notification.objects.filter(
+        id__in=notification_ids,
+        user=request.user,
+        is_read=False
+    ).update(
+        is_read=True,
+        read_at=timezone.now()
+    )
+    
+    return Response({
+        'message': f'{updated_count} notifications marked as read',
+        'updated_count': updated_count
+    }, status=status.HTTP_200_OK)
+
+
+@api_view(['DELETE'])
+@permission_classes([IsAuthenticated])
+def delete_notification(request, notification_id):
+    """
+    Delete a specific notification
+    
+    Example: DELETE /api/notifications/1/
+    """
+    try:
+        notification = Notification.objects.get(
+            id=notification_id,
+            user=request.user
+        )
+        notification.delete()
+        
+        return Response({
+            'message': 'Notification deleted successfully'
+        }, status=status.HTTP_200_OK)
+    except Notification.DoesNotExist:
+        return Response({
+            'error': 'Notification not found'
+        }, status=status.HTTP_404_NOT_FOUND)
+
+
+@api_view(['DELETE'])
+@permission_classes([IsAuthenticated])
+def delete_all_read_notifications(request):
+    """
+    Delete all read notifications for the user
+    
+    Example: DELETE /api/notifications/delete-all-read/
+    """
+    deleted_count, _ = Notification.objects.filter(
+        user=request.user,
+        is_read=True
+    ).delete()
+    
+    return Response({
+        'message': f'{deleted_count} notifications deleted',
+        'deleted_count': deleted_count
+    }, status=status.HTTP_200_OK)
+
+
+@api_view(['GET'])
+@permission_classes([IsAuthenticated])
+def get_notification_stats(request):
+    """
+    Get notification statistics for the user
+    
+    Example: GET /api/notifications/stats/
+    """
+    total = Notification.objects.filter(user=request.user).count()
+    unread = Notification.objects.filter(
+        user=request.user,
+        is_read=False
+    ).count()
+    
+    # Count by notification type
+    from django.db.models import Count
+    type_counts = Notification.objects.filter(
+        user=request.user
+    ).values('notification_type').annotate(
+        count=Count('id')
+    )
+    
+    return Response({
+        'total_notifications': total,
+        'unread_notifications': unread,
+        'read_notifications': total - unread,
+        'by_type': list(type_counts)
+    }, status=status.HTTP_200_OK)
+
+
+# Admin endpoints
+@api_view(['POST'])
+@permission_classes([IsAdminUser])
+def create_notification(request):
+    """
+    Create a new notification (Admin only)
+    
+    Body: {
+        "user": 1,
+        "person": 2,
+        "notification_type": "profile_view",
+        "message": "Sarah viewed your profile"
+    }
+    
+    Example: POST /api/notifications/create/
+    """
+    serializer = NotificationCreateSerializer(data=request.data)
+    
+    if serializer.is_valid():
+        notification = serializer.save()
+        
+        response_serializer = NotificationSerializer(notification)
+        
+        return Response({
+            'message': 'Notification created successfully',
+            'notification': response_serializer.data
+        }, status=status.HTTP_201_CREATED)
+    
+    return Response(
+        serializer.errors,
+        status=status.HTTP_400_BAD_REQUEST
+    )
+
+
+@api_view(['POST'])
+@permission_classes([IsAdminUser])
+def send_bulk_notifications(request):
+    """
+    Send notifications to multiple users (Admin only)
+    
+    Body: {
+        "user_ids": [1, 2, 3],
+        "person": 5,
+        "notification_type": "match",
+        "message": "You have a new match!"
+    }
+    
+    Example: POST /api/notifications/send-bulk/
+    """
+    user_ids = request.data.get('user_ids', [])
+    person_id = request.data.get('person')
+    notification_type = request.data.get('notification_type', 'custom')
+    message = request.data.get('message')
+    
+    if not user_ids or not person_id or not message:
+        return Response({
+            'error': 'user_ids, person, and message are required'
+        }, status=status.HTTP_400_BAD_REQUEST)
+    
+    try:
+        person = People.objects.get(id=person_id, is_active=True)
+        users = CustomUser.objects.filter(
+            id__in=user_ids,
+            is_active=True
+        )
+        
+        notifications = []
+        for user in users:
+            notification = Notification.objects.create(
+                user=user,
+                person=person,
+                notification_type=notification_type,
+                message=message
+            )
+            notifications.append(notification)
+        
+        return Response({
+            'message': f'{len(notifications)} notifications created',
+            'created_count': len(notifications)
+        }, status=status.HTTP_201_CREATED)
+        
+    except People.DoesNotExist:
+        return Response({
+            'error': 'Person not found'
+        }, status=status.HTTP_404_NOT_FOUND)
 
 
 

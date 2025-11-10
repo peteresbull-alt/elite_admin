@@ -32,4 +32,20 @@ urlpatterns = [
     
     # Get statistics about people
     path('people/stats/', views.get_people_stats, name='get_people_stats'),
+
+
+    # NOTIFICATION
+
+    path('notifications/', views.get_user_notifications, name='get_notifications'),
+    path('notifications/stats/', views.get_notification_stats, name='notification_stats'),
+    path('notifications/<int:notification_id>/', views.get_notification_detail, name='notification_detail'),
+    path('notifications/<int:notification_id>/mark-read/', views.mark_notification_as_read, name='mark_notification_read'),
+    path('notifications/<int:notification_id>/delete/', views.delete_notification, name='delete_notification'),
+    path('notifications/mark-all-read/', views.mark_all_notifications_as_read, name='mark_all_read'),
+    path('notifications/mark-multiple-read/', views.mark_multiple_notifications_as_read, name='mark_multiple_read'),
+    path('notifications/delete-all-read/', views.delete_all_read_notifications, name='delete_all_read'),
+    
+    # Admin endpoints
+    path('notifications/create/', views.create_notification, name='create_notification'),
+    path('notifications/send-bulk/', views.send_bulk_notifications, name='send_bulk_notifications'),
 ]

@@ -2,8 +2,8 @@ from rest_framework import serializers
 from django.contrib.auth import authenticate
 from django.contrib.auth.password_validation import validate_password
 from django.core.exceptions import ValidationError as DjangoValidationError
-from .models import CustomUser, UserPhoto, People, PeoplePhoto
-
+from .models import CustomUser, UserPhoto, People, PeoplePhoto, Notification
+from django.utils import timezone
 
 class UserPhotoSerializer(serializers.ModelSerializer):
     class Meta:
@@ -421,5 +421,119 @@ class PeopleDetailSerializer(serializers.ModelSerializer):
 
 
 
+class NotificationPersonSerializer(serializers.ModelSerializer):
+    """Serializer for Person data in notifications"""
+    profile_picture = serializers.SerializerMethodField()
+    
+    class Meta:
+        model = People
+        fields = [
+            'id', 'first_name', 'last_name', 'full_name',
+            'age', 'occupation', 'location', 'verified',
+            'profile_picture', 'membership_type'
+        ]
 
+    def get_profile_picture(self, obj):
+        """Return full Cloudinary URL for profile picture"""
+        if obj.profile_picture:
+            return self._get_full_image_url(obj.profile_picture)
+        
+        profile_photo = obj.photos.filter(is_profile_picture=True).first()
+        if profile_photo:
+            return self._get_full_image_url(profile_photo.image)
+        
+        first_photo = obj.photos.first()
+        if first_photo:
+            return self._get_full_image_url(first_photo.image)
+        
+        return None
+
+    def _get_full_image_url(self, image_field):
+        """Helper method to get full Cloudinary URL"""
+        if not image_field:
+            return None
+        image_str = str(image_field)
+        if image_str.startswith('http'):
+            return image_str
+        from django.conf import settings
+        cloud_name = settings.CLOUDINARY_STORAGE.get('CLOUD_NAME', '')
+        if cloud_name:
+            return f"https://res.cloudinary.com/{cloud_name}/{image_str}"
+        return image_str
+
+
+class NotificationSerializer(serializers.ModelSerializer):
+    """Main notification serializer"""
+    person = NotificationPersonSerializer(read_only=True)
+    person_id = serializers.PrimaryKeyRelatedField(
+        queryset=People.objects.all(),
+        write_only=True,
+        source='person'
+    )
+    time_ago = serializers.SerializerMethodField()
+    
+    class Meta:
+        model = Notification
+        fields = [
+            'id', 'user', 'person', 'person_id', 'notification_type',
+            'message', 'is_read', 'created_at', 'read_at', 'time_ago'
+        ]
+        read_only_fields = ['id', 'user', 'created_at', 'read_at']
+
+    def get_time_ago(self, obj):
+        """Calculate how long ago the notification was created"""
+        now = timezone.now()
+        diff = now - obj.created_at
+        
+        seconds = diff.total_seconds()
+        
+        if seconds < 60:
+            return "Just now"
+        elif seconds < 3600:
+            minutes = int(seconds / 60)
+            return f"{minutes}m ago"
+        elif seconds < 86400:
+            hours = int(seconds / 3600)
+            return f"{hours}h ago"
+        elif seconds < 604800:
+            days = int(seconds / 86400)
+            return f"{days}d ago"
+        else:
+            weeks = int(seconds / 604800)
+            return f"{weeks}w ago"
+
+
+class NotificationCreateSerializer(serializers.ModelSerializer):
+    """Serializer for creating notifications (admin use)"""
+    
+    class Meta:
+        model = Notification
+        fields = [
+            'user', 'person', 'notification_type', 'message'
+        ]
+
+    def validate(self, data):
+        """Ensure user and person exist"""
+        user = data.get('user')
+        person = data.get('person')
+        
+        if not user.is_active:
+            raise serializers.ValidationError({
+                'user': 'Cannot send notification to inactive user'
+            })
+        
+        if not person.is_active:
+            raise serializers.ValidationError({
+                'person': 'Cannot send notification about inactive person'
+            })
+        
+        return data
+
+
+class NotificationBulkReadSerializer(serializers.Serializer):
+    """Serializer for marking multiple notifications as read"""
+    notification_ids = serializers.ListField(
+        child=serializers.IntegerField(),
+        required=True
+    )
 

@@ -1,7 +1,6 @@
 from django.contrib import admin
 from django.contrib.auth.admin import UserAdmin
-from .models import CustomUser, UserPhoto, People, PeoplePhoto
-
+from .models import CustomUser, UserPhoto, People, PeoplePhoto, Notification
 
 
 
@@ -164,6 +163,63 @@ class PeoplePhotoAdmin(admin.ModelAdmin):
     list_display = ['id', 'person', 'is_profile_picture', 'order', 'uploaded_at']
     list_filter = ['is_profile_picture', 'uploaded_at']
     search_fields = ['person__first_name', 'person__last_name']
+
+
+
+
+
+
+@admin.register(Notification)
+class NotificationAdmin(admin.ModelAdmin):
+    list_display = [
+        'id', 'user', 'person', 'notification_type',
+        'is_read', 'created_at', 'message_preview'
+    ]
+    list_filter = ['notification_type', 'is_read', 'created_at']
+    search_fields = [
+        'user__email', 'user__first_name', 'user__last_name',
+        'person__first_name', 'person__last_name', 'message'
+    ]
+    readonly_fields = ['created_at', 'read_at']
+    raw_id_fields = ['user', 'person']
+    
+    fieldsets = (
+        ('Recipients', {
+            'fields': ('user', 'person')
+        }),
+        ('Notification Details', {
+            'fields': ('notification_type', 'message')
+        }),
+        ('Status', {
+            'fields': ('is_read', 'read_at', 'created_at')
+        }),
+    )
+    
+    def message_preview(self, obj):
+        """Show first 50 characters of message"""
+        return obj.message[:50] + '...' if len(obj.message) > 50 else obj.message
+    message_preview.short_description = 'Message Preview'
+    
+    def get_queryset(self, request):
+        """Optimize queries"""
+        qs = super().get_queryset(request)
+        return qs.select_related('user', 'person')
+    
+    actions = ['mark_as_read', 'mark_as_unread']
+    
+    def mark_as_read(self, request, queryset):
+        """Mark selected notifications as read"""
+        from django.utils import timezone
+        updated = queryset.update(is_read=True, read_at=timezone.now())
+        self.message_user(request, f'{updated} notifications marked as read')
+    mark_as_read.short_description = 'Mark selected as read'
+    
+    def mark_as_unread(self, request, queryset):
+        """Mark selected notifications as unread"""
+        updated = queryset.update(is_read=False, read_at=None)
+        self.message_user(request, f'{updated} notifications marked as unread')
+    mark_as_unread.short_description = 'Mark selected as unread'
+
 
 
 
