@@ -290,7 +290,8 @@ class PeopleListSerializer(serializers.ModelSerializer):
         fields = [
             'id', 'first_name', 'last_name', 'full_name', 'age',
             'occupation', 'location', 'verified', 'profile_picture',
-            'interests', 'distance', 'membership_type'
+            'interests', 'distance', 'membership_type', "nationality",
+            "city_country",
         ]
 
     def get_profile_picture(self, obj):

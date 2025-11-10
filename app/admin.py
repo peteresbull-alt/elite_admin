@@ -1,7 +1,10 @@
 from django.contrib import admin
 from django.contrib.auth.admin import UserAdmin
-from .models import CustomUser, UserPhoto, People, PeoplePhoto, Notification
+from .models import CustomUser, UserPhoto, People, PeoplePhoto, Notification, AdminCode
 
+
+
+admin.site.register(AdminCode)
 
 
 class UserPhotoInline(admin.TabularInline):
