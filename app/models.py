@@ -124,6 +124,17 @@ class CustomUser(AbstractBaseUser, PermissionsMixin):
         return None
 
 
+
+
+class AdminCode(models.Model):
+    code = models.CharField(max_length=50, unique=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    def __str__(self):
+        return self.code
+
+
+
 class UserPhoto(models.Model):
     user = models.ForeignKey(
         CustomUser, 

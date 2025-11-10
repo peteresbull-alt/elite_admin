@@ -2,6 +2,9 @@ from django.urls import path
 from . import views
 
 urlpatterns = [
+
+    path('verify-code/', views.VerifyAdminCodeView.as_view(), name='verify-admin-code'),
+
     path("validate-token/", views.validate_token, name="validate-token"),
     # Authentication
     path('register/', views.register_user, name='register'),

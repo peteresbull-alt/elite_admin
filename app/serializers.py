@@ -2,8 +2,15 @@ from rest_framework import serializers
 from django.contrib.auth import authenticate
 from django.contrib.auth.password_validation import validate_password
 from django.core.exceptions import ValidationError as DjangoValidationError
-from .models import CustomUser, UserPhoto, People, PeoplePhoto, Notification
+from .models import CustomUser, UserPhoto, People, PeoplePhoto, Notification, AdminCode
 from django.utils import timezone
+
+
+
+class AdminCodeSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = AdminCode
+        fields = ['code']
 
 class UserPhotoSerializer(serializers.ModelSerializer):
     class Meta:

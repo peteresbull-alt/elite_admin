@@ -5,7 +5,9 @@ from rest_framework.permissions import IsAuthenticated, AllowAny, IsAdminUser
 from rest_framework.authtoken.models import Token
 from django.utils import timezone
 from django.contrib.auth import logout
-from .models import CustomUser, UserPhoto, People, Notification
+from .models import CustomUser, UserPhoto, People, Notification, AdminCode
+
+from rest_framework.views import APIView
 
 from .serializers import (
     UserRegistrationSerializer,
@@ -828,6 +830,17 @@ def send_bulk_notifications(request):
 
 
 
+
+class VerifyAdminCodeView(APIView):
+    permission_classes = [AllowAny]
+
+    def post(self, request):
+        entered_code = request.data.get('code', '').strip()
+        if not entered_code:
+            return Response({'message': 'Please enter a code.'}, status=status.HTTP_400_BAD_REQUEST)
+        if AdminCode.objects.filter(code=entered_code).exists():
+            return Response({'message': 'Access granted.'}, status=status.HTTP_200_OK)
+        return Response({'message': 'The code entered is incorrect.'}, status=status.HTTP_400_BAD_REQUEST)
 
 
 
