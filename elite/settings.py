@@ -41,6 +41,7 @@ DEBUG = config('DEBUG', default=False, cast=bool)  # Set to False for production
 # Application definition
 
 INSTALLED_APPS = [
+    'corsheaders',  # For handling CORS if frontend is on different domain
     'django.contrib.admin',
     'django.contrib.auth',
     'django.contrib.contenttypes',
@@ -48,7 +49,7 @@ INSTALLED_APPS = [
     'django.contrib.messages',
     'django.contrib.staticfiles',
 
-    'corsheaders',  # For handling CORS if frontend is on different domain
+    
     # Third party apps
     'rest_framework',
     'rest_framework.authtoken',
@@ -64,8 +65,8 @@ INSTALLED_APPS = [
 MIDDLEWARE = [
     'django.middleware.security.SecurityMiddleware',
     "whitenoise.middleware.WhiteNoiseMiddleware",
-    'django.contrib.sessions.middleware.SessionMiddleware',
     'corsheaders.middleware.CorsMiddleware',  # Add CORS middleware
+    'django.contrib.sessions.middleware.SessionMiddleware',
     'django.middleware.common.CommonMiddleware',
     'django.middleware.csrf.CsrfViewMiddleware',
     'django.contrib.auth.middleware.AuthenticationMiddleware',
@@ -90,6 +91,9 @@ REST_FRAMEWORK = {
     ],
 }
 
+
+
+
 CLOUDINARY_STORAGE = {
     'CLOUD_NAME': config('CLOUDINARY_CLOUD_NAME'),
     'API_KEY': config('CLOUDINARY_API_KEY'),
@@ -112,7 +116,22 @@ CORS_ALLOWED_ORIGINS = [
     "https://elitesugarfrontend.vercel.app",
 ]
 
+
+# TEMPORARY - for debugging only
+CORS_ALLOW_ALL_ORIGINS = True
+
 CORS_ALLOW_CREDENTIALS = True
+
+# Add these additional CORS settings
+CORS_ALLOW_METHODS = [
+    'DELETE',
+    'GET',
+    'OPTIONS',
+    'PATCH',
+    'POST',
+    'PUT',
+]
+
 
 CORS_ALLOW_HEADERS = [
     'accept',
@@ -125,6 +144,9 @@ CORS_ALLOW_HEADERS = [
     'x-csrftoken',
     'x-requested-with',
 ]
+
+# This is important for file uploads
+CORS_EXPOSE_HEADERS = ['Content-Type', 'X-CSRFToken']
 
 
 ROOT_URLCONF = 'elite.urls'

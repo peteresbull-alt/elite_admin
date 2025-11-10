@@ -33,6 +33,12 @@ def register_user(request):
     Register a new user
     POST /api/register/
     """
+
+    # Handle preflight request
+    # if request.method == 'OPTIONS':
+    #     return Response(status=status.HTTP_200_OK)
+    
+
     serializer = UserRegistrationSerializer(data=request.data)
     
     if serializer.is_valid():
