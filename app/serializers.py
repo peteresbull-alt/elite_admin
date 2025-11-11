@@ -18,29 +18,15 @@ class UserPhotoSerializer(serializers.ModelSerializer):
         fields = ['id', 'image', 'is_profile_picture', 'uploaded_at', 'order']
         read_only_fields = ['uploaded_at']
 
-    def get_image(self, obj):
-        """Return full Cloudinary URL"""
-        if obj.image:
-            # Check if it's already a full URL
-            image_str = str(obj.image)
-            if image_str.startswith('http'):
-                return image_str
-            # Build the full Cloudinary URL
-            from django.conf import settings
-            cloud_name = settings.CLOUDINARY_STORAGE.get('CLOUD_NAME', '')
-            if cloud_name:
-                return f"https://res.cloudinary.com/{cloud_name}/{image_str}"
-            return image_str
-        return None
-
 
 class UserRegistrationSerializer(serializers.ModelSerializer):
     password = serializers.CharField(write_only=True, min_length=8)
     confirm_password = serializers.CharField(write_only=True)
-    photos = serializers.ListField(
-        child=serializers.ImageField(),
+    photo_urls = serializers.ListField(
+        child=serializers.URLField(),
         write_only=True,
-        required=False
+        required=False,
+        allow_empty=True
     )
 
     class Meta:
@@ -49,14 +35,13 @@ class UserRegistrationSerializer(serializers.ModelSerializer):
             'id', 'email', 'password', 'confirm_password',
             'first_name', 'last_name', 'date_of_birth', 'place_of_birth',
             'nationality', 'city_country', 'gender', 'full_address',
-            'phone_number', 'membership_type', 'interests', 'photos'
+            'phone_number', 'membership_type', 'interests', 'photo_urls'
         ]
 
     def validate_password(self, value):
         """
         Validate password using Django's password validators
         """
-        # Create a temporary user instance for validation
         user = CustomUser(
             email=self.initial_data.get('email', ''),
             first_name=self.initial_data.get('first_name', ''),
@@ -64,10 +49,8 @@ class UserRegistrationSerializer(serializers.ModelSerializer):
         )
         
         try:
-            # Run Django's password validation
             validate_password(value, user=user)
         except DjangoValidationError as e:
-            # Convert Django validation errors to DRF format
             raise serializers.ValidationError(list(e.messages))
         
         return value
@@ -87,21 +70,53 @@ class UserRegistrationSerializer(serializers.ModelSerializer):
 
     def create(self, validated_data):
         validated_data.pop('confirm_password')
-        photos = validated_data.pop('photos', [])
+        photo_urls = validated_data.pop('photo_urls', [])
         
         user = CustomUser.objects.create_user(**validated_data)
         
-        # Create user photos
-        for index, photo in enumerate(photos):
+        # Create user photos from Cloudinary URLs
+        for index, photo_url in enumerate(photo_urls):
             UserPhoto.objects.create(
                 user=user,
-                image=photo,
+                image=photo_url,  # Store Cloudinary URL directly
                 is_profile_picture=(index == 0),
                 order=index
             )
         
         return user
 
+
+class UserProfileSerializer(serializers.ModelSerializer):
+    photos = UserPhotoSerializer(many=True, read_only=True)
+    full_name = serializers.ReadOnlyField()
+    age = serializers.ReadOnlyField()
+    profile_picture = serializers.SerializerMethodField()
+
+    class Meta:
+        model = CustomUser
+        fields = [
+            'id', 'email', 'first_name', 'last_name', 'full_name', 'age',
+            'date_of_birth', 'place_of_birth', 'nationality', 'city_country',
+            'gender', 'full_address', 'phone_number', 'membership_type',
+            'interests', 'bio', 'occupation', 'education', 'height',
+            'location', 'net_worth', 'looking_for', 'relationship_goals',
+            'is_approved', 'verified', 'date_joined', 'profile_views',
+            'matches_count', 'favorites_count', 'photos', 'profile_picture'
+        ]
+        read_only_fields = [
+            'id', 'is_approved', 'verified', 'date_joined',
+            'profile_views', 'matches_count', 'favorites_count'
+        ]
+
+    def get_profile_picture(self, obj):
+        """Return Cloudinary URL for profile picture"""
+        profile_photo = obj.photos.filter(is_profile_picture=True).first()
+        if profile_photo:
+            return str(profile_photo.image)
+        first_photo = obj.photos.first()
+        if first_photo:
+            return str(first_photo.image)
+        return None
 
 class UserLoginSerializer(serializers.Serializer):
     email = serializers.EmailField()
@@ -145,52 +160,6 @@ class UserLoginSerializer(serializers.Serializer):
                 'non_field_errors': 'Must include "email" and "password".'
             })
 
-
-class UserProfileSerializer(serializers.ModelSerializer):
-    photos = UserPhotoSerializer(many=True, read_only=True)
-    full_name = serializers.ReadOnlyField()
-    age = serializers.ReadOnlyField()
-    profile_picture = serializers.SerializerMethodField()
-
-    class Meta:
-        model = CustomUser
-        fields = [
-            'id', 'email', 'first_name', 'last_name', 'full_name', 'age',
-            'date_of_birth', 'place_of_birth', 'nationality', 'city_country',
-            'gender', 'full_address', 'phone_number', 'membership_type',
-            'interests', 'bio', 'occupation', 'education', 'height',
-            'location', 'net_worth', 'looking_for', 'relationship_goals',
-            'is_approved', 'verified', 'date_joined', 'profile_views',
-            'matches_count', 'favorites_count', 'photos', 'profile_picture'
-        ]
-        read_only_fields = [
-            'id', 'is_approved', 'verified', 'date_joined',
-            'profile_views', 'matches_count', 'favorites_count'
-        ]
-
-    def get_profile_picture(self, obj):
-        """Return full Cloudinary URL for profile picture"""
-        profile_photo = obj.photos.filter(is_profile_picture=True).first()
-        if profile_photo:
-            return self._get_full_image_url(profile_photo.image)
-        first_photo = obj.photos.first()
-        if first_photo:
-            return self._get_full_image_url(first_photo.image)
-        return None
-
-    def _get_full_image_url(self, image_field):
-        """Helper method to get full Cloudinary URL"""
-        if not image_field:
-            return None
-        image_str = str(image_field)
-        if image_str.startswith('http'):
-            return image_str
-        # Build the full Cloudinary URL
-        from django.conf import settings
-        cloud_name = settings.CLOUDINARY_STORAGE.get('CLOUD_NAME', '')
-        if cloud_name:
-            return f"https://res.cloudinary.com/{cloud_name}/{image_str}"
-        return image_str
 
 
 class UserUpdateSerializer(serializers.ModelSerializer):

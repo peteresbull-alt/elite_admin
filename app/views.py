@@ -24,21 +24,35 @@ from .serializers import (
 from django.db.models import Q
 
 
-
-
 @api_view(['POST'])
 @permission_classes([AllowAny])
 def register_user(request):
     """
-    Register a new user
+    Register a new user with Cloudinary photo URLs
     POST /api/register/
-    """
-
-    # Handle preflight request
-    # if request.method == 'OPTIONS':
-    #     return Response(status=status.HTTP_200_OK)
     
-
+    Expected payload:
+    {
+        "email": "user@example.com",
+        "password": "password123",
+        "confirm_password": "password123",
+        "first_name": "John",
+        "last_name": "Doe",
+        "date_of_birth": "1990-01-01",
+        "place_of_birth": "New York",
+        "nationality": "American",
+        "city_country": "New York, USA",
+        "gender": "male",
+        "full_address": "123 Main St, New York",
+        "phone_number": "+1234567890",
+        "membership_type": "regular",
+        "interests": ["Travel", "Reading", "Music"],
+        "photo_urls": [
+            "https://res.cloudinary.com/...",
+            "https://res.cloudinary.com/..."
+        ]
+    }
+    """
     serializer = UserRegistrationSerializer(data=request.data)
     
     if serializer.is_valid():
@@ -52,7 +66,6 @@ def register_user(request):
         
         return Response({
             'message': 'Registration successful. Your account is pending approval.',
-            # 'token': token.key,
             'user': profile_serializer.data,
             'is_approved': user.is_approved
         }, status=status.HTTP_201_CREATED)
