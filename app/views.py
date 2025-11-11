@@ -20,6 +20,9 @@ from .serializers import (
     NotificationSerializer,
     NotificationCreateSerializer,
     NotificationBulkReadSerializer,
+    UserPhotoUploadSerializer,
+    UserPhotoUpdateSerializer,
+
 )
 from django.db.models import Q
 
@@ -133,6 +136,10 @@ def logout_user(request):
         }, status=status.HTTP_400_BAD_REQUEST)
 
 
+
+
+
+
 @api_view(['GET'])
 @permission_classes([IsAuthenticated])
 def get_user_profile(request):
@@ -142,6 +149,9 @@ def get_user_profile(request):
     """
     serializer = UserProfileSerializer(request.user)
     return Response(serializer.data, status=status.HTTP_200_OK)
+
+
+
 
 
 @api_view(['PUT', 'PATCH'])
@@ -168,6 +178,9 @@ def update_user_profile(request):
         }, status=status.HTTP_200_OK)
     
     return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+
+
+
 
 
 @api_view(['POST'])
@@ -197,45 +210,57 @@ def change_password(request):
     return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
 
+
+
+
 @api_view(['POST'])
 @permission_classes([IsAuthenticated])
 def upload_user_photos(request):
     """
-    Upload user photos
+    Upload user photos with Cloudinary URLs
     POST /api/photos/upload/
+    
+    Body: {
+        "photo_urls": [
+            "https://res.cloudinary.com/...",
+            "https://res.cloudinary.com/..."
+        ]
+    }
     """
-    files = request.FILES.getlist('photos')
+    serializer = UserPhotoUploadSerializer(data=request.data)
     
-    if not files:
-        return Response({
-            'error': 'No photos provided'
-        }, status=status.HTTP_400_BAD_REQUEST)
+    if not serializer.is_valid():
+        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
     
-    if len(files) > 6:
-        return Response({
-            'error': 'Maximum 6 photos allowed'
-        }, status=status.HTTP_400_BAD_REQUEST)
-    
-    photos = []
+    photo_urls = serializer.validated_data['photo_urls']
     existing_photos_count = request.user.photos.count()
     
-    for index, file in enumerate(files):
-        if existing_photos_count + len(photos) >= 6:
-            break
-            
+    # Check total limit
+    if existing_photos_count + len(photo_urls) > 6:
+        return Response({
+            'error': f'Maximum 6 photos allowed. You have {existing_photos_count} photos. Can only add {6 - existing_photos_count} more.'
+        }, status=status.HTTP_400_BAD_REQUEST)
+    
+    # Create photo records
+    photos = []
+    for index, photo_url in enumerate(photo_urls):
         photo = UserPhoto.objects.create(
             user=request.user,
-            image=file,
+            image=photo_url,
             is_profile_picture=(existing_photos_count == 0 and index == 0),
             order=existing_photos_count + index
         )
         photos.append(photo)
     
-    serializer = UserPhotoSerializer(photos, many=True)
+    # Serialize and return
+    response_serializer = UserPhotoSerializer(photos, many=True)
     return Response({
         'message': 'Photos uploaded successfully',
-        'photos': serializer.data
+        'photos': response_serializer.data
     }, status=status.HTTP_201_CREATED)
+
+
+
 
 
 @api_view(['DELETE'])
@@ -247,7 +272,15 @@ def delete_user_photo(request, photo_id):
     """
     try:
         photo = UserPhoto.objects.get(id=photo_id, user=request.user)
+        was_profile_picture = photo.is_profile_picture
         photo.delete()
+        
+        # If deleted photo was profile picture, set first remaining photo as profile
+        if was_profile_picture:
+            first_photo = request.user.photos.first()
+            if first_photo:
+                first_photo.is_profile_picture = True
+                first_photo.save()
         
         return Response({
             'message': 'Photo deleted successfully'
@@ -256,6 +289,10 @@ def delete_user_photo(request, photo_id):
         return Response({
             'error': 'Photo not found'
         }, status=status.HTTP_404_NOT_FOUND)
+
+
+
+
 
 
 @api_view(['GET'])
@@ -278,13 +315,15 @@ def set_profile_picture(request, photo_id):
     POST /api/photos/<photo_id>/set-profile/
     """
     try:
+        # Validate photo belongs to user
+        photo = UserPhoto.objects.get(id=photo_id, user=request.user)
+        
         # Remove current profile picture status
         request.user.photos.filter(is_profile_picture=True).update(
             is_profile_picture=False
         )
         
         # Set new profile picture
-        photo = UserPhoto.objects.get(id=photo_id, user=request.user)
         photo.is_profile_picture = True
         photo.save()
         
@@ -295,8 +334,9 @@ def set_profile_picture(request, photo_id):
         return Response({
             'error': 'Photo not found'
         }, status=status.HTTP_404_NOT_FOUND)
+    
 
-
+    
 # Import timezone at the top of the file
 from django.utils import timezone
 

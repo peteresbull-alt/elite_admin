@@ -118,6 +118,7 @@ class UserProfileSerializer(serializers.ModelSerializer):
             return str(first_photo.image)
         return None
 
+
 class UserLoginSerializer(serializers.Serializer):
     email = serializers.EmailField()
     password = serializers.CharField(write_only=True)
@@ -161,6 +162,43 @@ class UserLoginSerializer(serializers.Serializer):
             })
 
 
+class UserPhotoUpdateSerializer(serializers.Serializer):
+    """Serializer for setting profile picture"""
+    photo_id = serializers.IntegerField(required=True)
+    
+    def validate_photo_id(self, value):
+        """Validate photo exists and belongs to user"""
+        request = self.context.get('request')
+        if request:
+            try:
+                UserPhoto.objects.get(id=value, user=request.user)
+            except UserPhoto.DoesNotExist:
+                raise serializers.ValidationError("Photo not found or doesn't belong to you")
+        return value
+    
+
+
+
+
+
+
+class UserPhotoUploadSerializer(serializers.Serializer):
+    """Serializer for uploading photos with Cloudinary URLs"""
+    photo_urls = serializers.ListField(
+        child=serializers.URLField(),
+        required=True,
+        allow_empty=False,
+        max_length=6
+    )
+    
+    def validate_photo_urls(self, value):
+        """Validate photo URLs"""
+        if len(value) > 6:
+            raise serializers.ValidationError("Maximum 6 photos allowed")
+        return value
+
+
+
 
 class UserUpdateSerializer(serializers.ModelSerializer):
     class Meta:
@@ -180,6 +218,7 @@ class UserUpdateSerializer(serializers.ModelSerializer):
         return value
 
 
+
 class PasswordChangeSerializer(serializers.Serializer):
     current_password = serializers.CharField(write_only=True)
     new_password = serializers.CharField(write_only=True, min_length=8)
@@ -192,16 +231,12 @@ class PasswordChangeSerializer(serializers.Serializer):
         return value
 
     def validate_new_password(self, value):
-        """
-        Validate new password using Django's password validators
-        """
+        """Validate new password using Django's password validators"""
         user = self.context['request'].user
         
         try:
-            # Run Django's password validation
             validate_password(value, user=user)
         except DjangoValidationError as e:
-            # Convert Django validation errors to DRF format
             raise serializers.ValidationError(list(e.messages))
         
         return value
@@ -218,7 +253,7 @@ class PasswordChangeSerializer(serializers.Serializer):
         user.set_password(self.validated_data['new_password'])
         user.save()
         return user
-    
+
 
 
 
