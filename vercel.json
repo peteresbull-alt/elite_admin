@@ -11,20 +11,17 @@
     }
   ],
   "buildCommand": "bash build.sh",
-  "routes": [
+  "rewrites": [
     {
-      "src": "/(.*)",
-      "dest": "elite/wsgi.py"
+      "source": "/(.*)",
+      "destination": "elite/wsgi.py"
     }
   ],
   "headers": [
     {
       "source": "/api/(.*)",
       "headers": [
-        {
-          "key": "Access-Control-Allow-Credentials",
-          "value": "true"
-        },
+        { "key": "Access-Control-Allow-Credentials", "value": "true" },
         {
           "key": "Access-Control-Allow-Origin",
           "value": "https://elitesugarfrontend.vercel.app"
