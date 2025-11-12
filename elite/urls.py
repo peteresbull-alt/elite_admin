@@ -11,6 +11,8 @@ admin.site.site_title = "SMSureConnect Admin Portal"
 admin.site.index_title = "Welcome to SMSureConnect Admin Portal"
 
 
+
+
 def home(request):
     return redirect("/admin")
 
