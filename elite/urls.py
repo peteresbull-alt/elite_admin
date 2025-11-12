@@ -6,9 +6,9 @@ from django.shortcuts import redirect
 from django.conf import settings
 from django.conf.urls.static import static
 
-admin.site.site_header = "EliteSugar Administration"
-admin.site.site_title = "EliteSugar Admin Portal"
-admin.site.index_title = "Welcome to EliteSugar Admin Portal"
+admin.site.site_header = "SMSureConnect Administration"
+admin.site.site_title = "SMSureConnect Admin Portal"
+admin.site.index_title = "Welcome to SMSureConnect Admin Portal"
 
 
 def home(request):
