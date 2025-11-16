@@ -26,6 +26,7 @@ urlpatterns = [
 
     # Get list of people with optional filters
     path('people/', views.get_people_list, name='get_people_list'),
+    path('people/public/', views.get_people_list_publicly, name='get_people_list_publicly'),
     
     # Get detailed information about a specific person
     path('people/<int:person_id>/', views.get_person_detail, name='get_person_detail'),

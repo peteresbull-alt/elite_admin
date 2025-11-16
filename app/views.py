@@ -5,7 +5,14 @@ from rest_framework.permissions import IsAuthenticated, AllowAny, IsAdminUser
 from rest_framework.authtoken.models import Token
 from django.utils import timezone
 from django.contrib.auth import logout
-from .models import CustomUser, UserPhoto, People, Notification, AdminCode
+from .models import (
+    CustomUser, 
+    UserPhoto, 
+    People, 
+    Notification, 
+    AdminCode, 
+    PeoplePhoto,
+)
 
 from rest_framework.views import APIView
 
@@ -359,6 +366,59 @@ def validate_token(request):
         return Response({"valid": False}, status=status.HTTP_401_UNAUTHORIZED)
 
 
+
+@api_view(['GET'])
+@permission_classes([AllowAny])
+def get_people_list_publicly(request):
+    """
+    Get list of all people photos publicly (no authentication required)
+    Returns each photo with person details
+    
+    Response format:
+    [
+        {
+            "person_image": "cloudinary_url",
+            "person_name": "John Doe",
+            "person_age": 30,
+            "person_occupation": "Engineer"
+        }
+    ]
+    """
+    # Get all photos from active people, ordered by upload date
+    photos = PeoplePhoto.objects.filter(
+        person__is_active=True
+    ).select_related('person').order_by('-uploaded_at')
+    
+    # Build response data
+    results = []
+    for photo in photos:
+        # Get full Cloudinary URL
+        image_url = str(photo.image)
+        if not image_url.startswith('http'):
+            from django.conf import settings
+            cloud_name = settings.CLOUDINARY_STORAGE.get('CLOUD_NAME', '')
+            if cloud_name:
+                image_url = f"https://res.cloudinary.com/{cloud_name}/{image_url}"
+        
+        results.append({
+            'person_image': image_url,
+            'person_name': photo.person.full_name,
+            'person_age': photo.person.age,
+            'person_occupation': photo.person.occupation or '',
+            'person_location': photo.person.location or '',
+            'person_verified': photo.person.verified,
+            'person_id': photo.person.id,
+            'is_profile_picture': photo.is_profile_picture,
+            'person_interests': photo.person.interests or []
+        })
+    
+    return Response({
+        'results': results,
+        'count': len(results),
+    }, status=status.HTTP_200_OK)
+
+
+    
 
 @api_view(['GET'])
 @permission_classes([IsAuthenticated])
